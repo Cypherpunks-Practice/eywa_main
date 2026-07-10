@@ -1,0 +1,59 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-${EYWA_CLICKHOUSE_DATABASE:-eywa}}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-${EYWA_CLICKHOUSE_USERNAME:-default}}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-${EYWA_CLICKHOUSE_PASSWORD:-clickhouse}}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-${EYWA_CLICKHOUSE_HTTP_PORT:-18123}}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-${EYWA_CLICKHOUSE_NATIVE_PORT:-19000}}:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "clickhouse-client --user ${CLICKHOUSE_USER:-${EYWA_CLICKHOUSE_USERNAME:-default}} --password ${CLICKHOUSE_PASSWORD:-${EYWA_CLICKHOUSE_PASSWORD:-clickhouse}} --query 'SELECT 1'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      EYWA_RPC_ENDPOINT: ${EYWA_RPC_ENDPOINT:-http://host.docker.internal:8545}
+      EYWA_CLICKHOUSE_HOST: clickhouse
+      EYWA_CLICKHOUSE_PORT: 9000
+      EYWA_CLICKHOUSE_DATABASE: ${EYWA_CLICKHOUSE_DATABASE:-${CLICKHOUSE_DB:-eywa}}
+      EYWA_CLICKHOUSE_USERNAME: ${EYWA_CLICKHOUSE_USERNAME:-${CLICKHOUSE_USER:-default}}
+      EYWA_CLICKHOUSE_PASSWORD: ${EYWA_CLICKHOUSE_PASSWORD:-${CLICKHOUSE_PASSWORD:-clickhouse}}
+      EYWA_CLICKHOUSE_DRIVER: native
+      EYWA_CLICKHOUSE_STARTUP_TIMEOUT_SECONDS: ${EYWA_CLICKHOUSE_STARTUP_TIMEOUT_SECONDS:-60}
+      EYWA_CLICKHOUSE_RETRY_INTERVAL_SECONDS: ${EYWA_CLICKHOUSE_RETRY_INTERVAL_SECONDS:-1}
+      EYWA_START_BLOCK: ${EYWA_START_BLOCK:-24078090}
+      EYWA_CHUNK_SIZE: ${EYWA_CHUNK_SIZE:-10000}
+      EYWA_MAX_WORKERS: ${EYWA_MAX_WORKERS:-16}
+      EYWA_TRACE_ADDRESS_BATCH_SIZE: ${EYWA_TRACE_ADDRESS_BATCH_SIZE:-100}
+      EYWA_SCHEDULER_ENABLED: ${EYWA_SCHEDULER_ENABLED:-false}
+      EYWA_SCHEDULER_CRON: ${EYWA_SCHEDULER_CRON:-}
+      EYWA_SCHEDULER_TIMEZONE: ${EYWA_SCHEDULER_TIMEZONE:-UTC}
+      EYWA_SCHEDULER_RUNS: ${EYWA_SCHEDULER_RUNS:-1}
+    ports:
+      - "${EYWA_APP_PORT:-8000}:8000"
+    restart: unless-stopped
+
+volumes:
+  clickhouse_data:
