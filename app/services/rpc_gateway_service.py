@@ -208,6 +208,29 @@ class RpcGatewayService:
         result = response.get("result", [])
         return result if isinstance(result, list) else []
 
+    def _call_tracer_config(self) -> dict[str, Any]:
+        return {
+            "tracer": "callTracer",
+            "tracerConfig": {"onlyTopCall": False, "withLog": False},
+            "timeout": self._settings.trace_timeout,
+        }
+
+    async def debug_trace_block_by_number(self, block_number: int) -> list[dict[str, Any]]:
+        response = await self.make_request(
+            "debug_traceBlockByNumber",
+            [hex(block_number), self._call_tracer_config()],
+        )
+        result = response.get("result", [])
+        return result if isinstance(result, list) else []
+
+    async def debug_trace_transaction(self, tx_hash: str) -> dict[str, Any] | None:
+        response = await self.make_request(
+            "debug_traceTransaction",
+            [tx_hash, self._call_tracer_config()],
+        )
+        result = response.get("result")
+        return result if isinstance(result, dict) else None
+
     async def get_transaction_receipt(self, tx_hash: str) -> dict[str, Any] | None:
         try:
             response = await self.make_request(
