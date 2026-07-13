@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
+from concurrent.futures import CancelledError, Future
 from datetime import datetime
 from threading import Event, Lock, Thread
 from zoneinfo import ZoneInfo
@@ -27,7 +28,8 @@ class ScanSchedulerService:
         self._stop_event = Event()
         self._job_lock = Lock()
         self._scheduler_thread: Thread | None = None
-        self._worker_thread: Thread | None = None
+        self._scan_loop: asyncio.AbstractEventLoop | None = None
+        self._scan_loop_thread: Thread | None = None
         self._timezone = ZoneInfo(self._settings.scheduler_timezone)
         self._schedule: CronExpression | None = None
         if self._settings.scheduler_enabled and self._settings.scheduler_cron is not None:
@@ -43,6 +45,13 @@ class ScanSchedulerService:
             return
 
         self._stop_event.clear()
+        self._scan_loop = asyncio.new_event_loop()
+        self._scan_loop_thread = Thread(
+            target=self._run_scan_loop,
+            name="eywa-scan-loop",
+            daemon=True,
+        )
+        self._scan_loop_thread.start()
         self._scheduler_thread = Thread(
             target=self._run_loop,
             name="eywa-scan-scheduler",
@@ -60,8 +69,23 @@ class ScanSchedulerService:
         self._stop_event.set()
         if self._scheduler_thread is not None:
             self._scheduler_thread.join(timeout=5)
-        if self._worker_thread is not None and self._worker_thread.is_alive():
+        if self._job_lock.locked():
             logger.info("Scheduled scan is still running and will stop with the process")
+        if self._scan_loop is not None:
+            self._scan_loop.call_soon_threadsafe(self._scan_loop.stop)
+        if self._scan_loop_thread is not None:
+            self._scan_loop_thread.join(timeout=5)
+
+    def _run_scan_loop(self):
+        # Every scheduled scan runs on this one loop. The RPC client caches its HTTP session
+        # per event loop, so giving each run a fresh loop leaves later runs waiting forever on
+        # a session bound to a loop that is already closed.
+        scan_loop = self._scan_loop
+        if scan_loop is None:
+            return
+
+        asyncio.set_event_loop(scan_loop)
+        scan_loop.run_forever()
 
     def _run_loop(self):
         if self._schedule is None:
@@ -80,27 +104,35 @@ class ScanSchedulerService:
                 logger.warning("Scheduled scan skipped because the previous run is still in progress")
                 continue
 
-            self._worker_thread = Thread(
-                target=self._execute_scheduled_scan,
-                name="eywa-scan-worker",
-                daemon=True,
-            )
-            self._worker_thread.start()
+            scan_loop = self._scan_loop
+            if scan_loop is None or scan_loop.is_closed():
+                self._job_lock.release()
+                logger.warning("Scheduled scan skipped because the scan loop is not running")
+                return
 
-    def _execute_scheduled_scan(self):
+            scan_future = asyncio.run_coroutine_threadsafe(
+                self._execute_scheduled_scan_async(),
+                scan_loop,
+            )
+            scan_future.add_done_callback(self._on_scheduled_scan_finished)
+
+    def _on_scheduled_scan_finished(self, scan_future: Future[None]):
         try:
-            asyncio.run(self._execute_scheduled_scan_async())
+            scan_future.result()
+        except CancelledError:
+            logger.warning("Scheduled scan was cancelled")
         except Exception:
             logger.exception("Scheduled scan failed")
         finally:
-            try:
-                self._job_lock.release()
-            except RuntimeError:
-                logger.warning("Job lock was already released")
+            self._job_lock.release()
 
     async def _execute_scheduled_scan_async(self):
         orchestrator = self._scan_orchestrator_factory()
-        start_block, end_block = await orchestrator.resolve_auto_scan_window()
+        scan_window = await orchestrator.resolve_auto_scan_window()
+        if scan_window is None:
+            return
+
+        start_block, end_block = scan_window
         for run_index in range(1, self._settings.scheduler_runs + 1):
             logger.info(
                 "Starting scheduled scan sequence run %s/%s for fixed blocks %s-%s",
@@ -129,3 +161,5 @@ class ScanSchedulerService:
                 f"{result.forward_result.enriched_swap_count:,}",
                 f"{reverse_transactions:,}",
             )
+
+        await orchestrator.commit_auto_scan_progress(end_block)

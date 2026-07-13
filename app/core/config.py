@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     trace_backend: TraceBackend = TraceBackend.DEBUG
     trace_block_concurrency: PositiveInt = 8
     trace_timeout: NonEmptyStr = "120s"
+    # A pruned node only holds state for its most recent blocks; tracing anything older
+    # fails with "historical state is not available". Keep this below the node's window.
+    max_trace_depth: PositiveInt = 100
 
     receipt_batch_size: PositiveInt = 250
     factory_batch_size: PositiveInt = 250
