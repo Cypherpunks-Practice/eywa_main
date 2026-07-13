@@ -11,6 +11,9 @@ services:
       - "${CLICKHOUSE_NATIVE_PORT:-${EYWA_CLICKHOUSE_NATIVE_PORT:-19000}}:9000"
     volumes:
       - clickhouse_data:/var/lib/clickhouse
+      # Файлом, а не папкой: entrypoint образа сам дописывает в users.d пароль
+      # пользователя, bind-mount всей директории это затрёт.
+      - ./clickhouse/experimental.xml:/etc/clickhouse-server/users.d/experimental.xml:ro
     ulimits:
       nofile:
         soft: 262144

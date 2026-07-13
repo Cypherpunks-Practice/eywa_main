@@ -1,0 +1,10 @@
+<clickhouse>
+    <!-- В 24.8 refreshable materialized views (CREATE MATERIALIZED VIEW ... REFRESH EVERY)
+         помечены как экспериментальные и по умолчанию запрещены. Их использует дашборд
+         ChainBI (dim_pool_pair), подключающийся к этой базе. -->
+    <profiles>
+        <default>
+            <allow_experimental_refreshable_materialized_view>1</allow_experimental_refreshable_materialized_view>
+        </default>
+    </profiles>
+</clickhouse>
