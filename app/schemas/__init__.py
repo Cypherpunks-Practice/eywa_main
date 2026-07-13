@@ -21,7 +21,6 @@ from .scan import (
     ScanRunResult,
     ScanSequenceRunResult,
     TraceAddressRole,
-    TraceBackend,
     TransactionContext,
 )
 from .trading import (
@@ -58,7 +57,6 @@ __all__ = [
     "TokenMetadata",
     "TokenWrite",
     "TraceAddressRole",
-    "TraceBackend",
     "TradePayload",
     "TransactionContext",
     "TransactionWrite",

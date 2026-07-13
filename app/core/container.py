@@ -13,7 +13,6 @@ from ..services.rpc_gateway_service import RpcGatewayService
 from ..services.scan_orchestrator_service import ScanOrchestratorService
 from ..services.swap_parsing_service import SwapParsingService
 from ..services.token_metadata_service import TokenMetadataService
-from ..services.trace_provider_service import TraceProviderService
 from ..services.trade_enrichment_service import TradeEnrichmentService
 from ..services.trader_registry_service import TraderRegistryService
 from ..services.trading_persistence_service import TradingPersistenceService
@@ -29,17 +28,12 @@ class Container(containers.DeclarativeContainer):
         RpcGatewayService,
         settings=settings,
     )
-    trace_provider_service = providers.Factory(
-        TraceProviderService,
-        rpc_gateway_service=rpc_gateway_service,
-        settings=settings,
-    )
     healthcheck_service = providers.Factory(HealthcheckService)
     pool_registry_service = providers.Factory(PoolRegistryService)
     trader_registry_service = providers.Factory(TraderRegistryService)
     transaction_discovery_service = providers.Factory(
         TransactionDiscoveryService,
-        trace_provider_service=trace_provider_service,
+        rpc_gateway_service=rpc_gateway_service,
         settings=settings,
     )
     receipt_collection_service = providers.Factory(
@@ -49,7 +43,7 @@ class Container(containers.DeclarativeContainer):
     )
     reverse_search_service = providers.Factory(
         ReverseSearchService,
-        trace_provider_service=trace_provider_service,
+        rpc_gateway_service=rpc_gateway_service,
         settings=settings,
     )
     swap_parsing_service = providers.Factory(SwapParsingService)
@@ -71,7 +65,6 @@ class Container(containers.DeclarativeContainer):
     trade_enrichment_service = providers.Factory(
         TradeEnrichmentService,
         rpc_gateway_service=rpc_gateway_service,
-        trace_provider_service=trace_provider_service,
         token_metadata_service=token_metadata_service,
         settings=settings,
     )

@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from pydantic import Field, NonNegativeInt, PositiveFloat, PositiveInt, StringConstraints, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from ..schemas import ReverseHeuristicsTopLevelField, TraceBackend
+from ..schemas import ReverseHeuristicsTopLevelField
 
 NonEmptyStr = Annotated[
     str,
@@ -54,13 +54,6 @@ class Settings(BaseSettings):
     chunk_size: PositiveInt = 10_000
     max_workers: PositiveInt = 16
     trace_address_batch_size: PositiveInt = 100
-
-    trace_backend: TraceBackend = TraceBackend.DEBUG
-    trace_block_concurrency: PositiveInt = 8
-    trace_timeout: NonEmptyStr = "120s"
-    # A pruned node only holds state for its most recent blocks; tracing anything older
-    # fails with "historical state is not available". Keep this below the node's window.
-    max_trace_depth: PositiveInt = 100
 
     receipt_batch_size: PositiveInt = 250
     factory_batch_size: PositiveInt = 250
@@ -118,13 +111,6 @@ class Settings(BaseSettings):
             for item in items
             if str(item).strip()
         }
-
-    @field_validator("trace_backend", mode="before")
-    @classmethod
-    def _normalize_trace_backend(cls, value: object) -> object:
-        if value is None or isinstance(value, TraceBackend):
-            return value
-        return str(value).strip().lower()
 
     @field_validator("reverse_heuristics_top_level_field", mode="before")
     @classmethod
