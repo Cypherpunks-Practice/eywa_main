@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from pydantic import Field, NonNegativeInt, PositiveFloat, PositiveInt, StringConstraints, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from ..schemas import ReverseHeuristicsTopLevelField
+from ..schemas import ReverseHeuristicsTopLevelField, TraceBackend
 
 NonEmptyStr = Annotated[
     str,
@@ -54,8 +54,10 @@ class Settings(BaseSettings):
     chunk_size: PositiveInt = 10_000
     max_workers: PositiveInt = 16
     trace_address_batch_size: PositiveInt = 100
-    # Matches geth's default in-memory state window; older blocks cannot be traced.
-    max_trace_depth: PositiveInt = 128
+
+    trace_backend: TraceBackend = TraceBackend.DEBUG
+    trace_block_concurrency: PositiveInt = 8
+    trace_timeout: NonEmptyStr = "120s"
 
     receipt_batch_size: PositiveInt = 250
     factory_batch_size: PositiveInt = 250
@@ -113,6 +115,13 @@ class Settings(BaseSettings):
             for item in items
             if str(item).strip()
         }
+
+    @field_validator("trace_backend", mode="before")
+    @classmethod
+    def _normalize_trace_backend(cls, value: object) -> object:
+        if value is None or isinstance(value, TraceBackend):
+            return value
+        return str(value).strip().lower()
 
     @field_validator("reverse_heuristics_top_level_field", mode="before")
     @classmethod

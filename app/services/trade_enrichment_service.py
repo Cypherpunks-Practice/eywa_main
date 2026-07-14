@@ -20,6 +20,7 @@ from ..utils import (
 )
 from .rpc_gateway_service import RpcGatewayService
 from .token_metadata_service import TokenMetadataService
+from .trace_provider_service import TraceProviderService
 
 
 @dataclass(frozen=True)
@@ -34,10 +35,12 @@ class TradeEnrichmentService:
     def __init__(
         self,
         rpc_gateway_service: RpcGatewayService,
+        trace_provider_service: TraceProviderService,
         token_metadata_service: TokenMetadataService,
         settings: Settings,
     ):
         self._rpc_gateway_service = rpc_gateway_service
+        self._trace_provider_service = trace_provider_service
         self._token_metadata_service = token_metadata_service
         self._settings = settings
 
@@ -197,28 +200,14 @@ class TradeEnrichmentService:
         }
 
     async def trace_transaction_supported(self, sample_tx_hash: str) -> bool:
-        try:
-            response = await self._rpc_gateway_service.make_request(
-                "trace_transaction",
-                [sample_tx_hash],
-                allow_error=True,
-            )
-        except RpcError:
-            return False
-
-        if "error" not in response:
-            return True
-
-        message = str(response["error"]).lower()
-        unsupported_markers = ("method not found", "-32601", "not supported", "unsupported")
-        return not any(marker in message for marker in unsupported_markers)
+        return await self._trace_provider_service.trace_transaction_supported(sample_tx_hash)
 
     async def get_tx_bribe_wei(self, tx_hash: str, miner: str | None) -> int:
         if not miner:
             return 0
 
         try:
-            traces = await self._rpc_gateway_service.trace_transaction(tx_hash)
+            traces = await self._trace_provider_service.trace_transaction(tx_hash)
         except RpcError:
             return 0
 

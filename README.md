@@ -5,7 +5,7 @@
 Основной сценарий работы:
 
 1. проект берёт отслеживаемые адреса из таблицы `traders`;
-2. ищет связанные транзакции через RPC-метод `trace_filter`;
+2. ищет связанные транзакции по трейсам блоков (`debug_traceBlockByNumber` + `callTracer`);
 3. собирает `receipt`, декодирует swap-события и обогащает их метаданными;
 4. сохраняет результат в основные таблицы `transactions`, `swaps`, `tokens`, `liquidity_pools` и `dexes`;
 5. после forward scan может выполнить reverse scan по пулам, найти конкурентов и сохранить найденные competitor-адреса в БД.
@@ -27,9 +27,13 @@ Reverse scan больше не использует отдельные табл�
 
 - Python 3.12+
 - Docker и Docker Compose для локального ClickHouse
-- RPC endpoint EVM-ноды с поддержкой `trace_filter`
+- RPC endpoint EVM-ноды с трейсингом — одним из двух:
+  - **`debug` namespace** (`debug_traceBlockByNumber`, `debug_traceTransaction`) — Geth и совместимые. Это режим по умолчанию: `EYWA_TRACE_BACKEND=debug`.
+  - **`trace` namespace** (`trace_filter`, `trace_transaction`) — Erigon/OpenEthereum/Nethermind. Включается через `EYWA_TRACE_BACKEND=trace_filter` и работает заметно быстрее, так как нода фильтрует по адресам на своей стороне.
 
-`trace_transaction` желателен, но не обязателен: без него проект продолжит работать, просто `bribe` будет определяться как `0`.
+Важно: трейсинг требует состояния (state) на трейсимых блоках. Обычный full node (Geth без `--gcmode=archive`) хранит state только за последние ~128 блоков, поэтому на нём сканируются лишь блоки у головы цепи; для исторических диапазонов нужна archive-нода или archive-провайдер.
+
+`bribe` считается по трейсам транзакции. Если нода не отдаёт нужный метод, проект продолжит работать — `bribe` просто будет `0`.
 
 ## Как запускать проект
 

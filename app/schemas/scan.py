@@ -18,6 +18,11 @@ class TraceAddressRole(StrEnum):
     FROM = "from"
 
 
+class TraceBackend(StrEnum):
+    DEBUG = "debug"
+    TRACE_FILTER = "trace_filter"
+
+
 class ReverseScanSource(StrEnum):
     FORWARD = "forward"
     DATABASE = "database"

@@ -17,6 +17,7 @@ from .evm import (
 from .math import median_decimal, raw_amount_to_decimal
 from .rpc import provider_supports_batch_requests
 from .scanning import validate_block_window
+from .traces import flatten_call_frames, normalize_block_trace_entries
 from .validators import (
     normalize_address_list,
     normalize_optional_address,
@@ -31,10 +32,12 @@ __all__ = [
     "decode_bytes32_string_call_result",
     "decode_string_call_result",
     "decode_uint_call_result",
+    "flatten_call_frames",
     "iter_block_chunks",
     "iter_chunks",
     "median_decimal",
     "normalize_address",
+    "normalize_block_trace_entries",
     "normalize_to_hex",
     "normalize_topic0",
     "normalize_tx_hash",

@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 
 from ..core.config import Settings
 from ..core.database import session_scope
-from ..models.scanning import ScanCursor
 from ..models.trading import Transaction
 from ..schemas import (
     ReverseScanRequest,
@@ -35,8 +33,6 @@ from .trading_persistence_service import TradingPersistenceService
 from .transaction_discovery_service import TransactionDiscoveryService
 
 logger = logging.getLogger(__name__)
-
-AUTO_SCAN_CURSOR_NAME = "auto"
 
 
 class ScanOrchestratorService:
@@ -109,28 +105,9 @@ class ScanOrchestratorService:
         )
         return await self.run_scan(scan_request, persist=persist)
 
-    async def resolve_auto_scan_window(self) -> tuple[int, int] | None:
+    async def resolve_auto_scan_window(self) -> tuple[int, int]:
         start_block = await asyncio.to_thread(self._resolve_auto_start_block)
         end_block = await self._rpc_gateway_service.get_latest_block_number()
-
-        oldest_traceable_block = max(end_block - self._settings.max_trace_depth, 0)
-        if start_block < oldest_traceable_block:
-            logger.warning(
-                "Blocks %s-%s are out of reach and will be skipped: the node only keeps "
-                "state for the last %s block(s)",
-                f"{start_block:,}",
-                f"{oldest_traceable_block - 1:,}",
-                f"{self._settings.max_trace_depth:,}",
-            )
-            start_block = oldest_traceable_block
-
-        if start_block > end_block:
-            logger.info(
-                "Auto scan skipped: no new blocks after %s (head is %s)",
-                f"{start_block - 1:,}",
-                f"{end_block:,}",
-            )
-            return None
 
         try:
             validated_start_block, validated_end_block = validate_block_window(
@@ -149,10 +126,6 @@ class ScanOrchestratorService:
             f"{validated_end_block:,}",
         )
         return validated_start_block, validated_end_block
-
-    async def commit_auto_scan_progress(self, last_scanned_block: int) -> None:
-        await asyncio.to_thread(self._persist_auto_scan_cursor, last_scanned_block)
-        logger.info("Auto scan cursor advanced to block %s", f"{last_scanned_block:,}")
 
     async def run_scan_sequence_for_request(
         self,
@@ -275,17 +248,6 @@ class ScanOrchestratorService:
         )
 
     def _resolve_auto_start_block(self) -> int:
-        # The cursor moves after every completed scan, while `transactions` only grows when a
-        # tracked trader actually traded. Without the cursor a quiet market would pin the scan
-        # window to the last trade and drag it out of the node's state window.
-        last_scanned_block = self._get_auto_scan_cursor()
-        if last_scanned_block is not None:
-            logger.info(
-                "Auto scan will continue from cursor block %s",
-                f"{last_scanned_block + 1:,}",
-            )
-            return last_scanned_block + 1
-
         last_persisted_block = self._get_last_persisted_block()
         if last_persisted_block is None:
             logger.info(
@@ -311,34 +273,6 @@ class ScanOrchestratorService:
             return None
 
         return int(last_persisted_block)
-
-    @staticmethod
-    def _get_auto_scan_cursor() -> int | None:
-        with session_scope() as session:
-            last_scanned_block = session.execute(
-                select(func.max(ScanCursor.last_scanned_block)).where(
-                    ScanCursor.name == AUTO_SCAN_CURSOR_NAME,
-                )
-            ).scalar()
-
-        if last_scanned_block is None:
-            return None
-
-        return int(last_scanned_block)
-
-    @staticmethod
-    def _persist_auto_scan_cursor(last_scanned_block: int) -> None:
-        with session_scope() as session:
-            session.execute(
-                ScanCursor.__table__.insert(),
-                [
-                    {
-                        "name": AUTO_SCAN_CURSOR_NAME,
-                        "last_scanned_block": last_scanned_block,
-                        "updated_at": datetime.now(UTC).replace(tzinfo=None),
-                    }
-                ],
-            )
 
     async def run_reverse_scan(
         self,
