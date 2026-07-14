@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     chunk_size: PositiveInt = 10_000
     max_workers: PositiveInt = 16
     trace_address_batch_size: PositiveInt = 100
+    # Matches geth's default in-memory state window; older blocks cannot be traced.
+    max_trace_depth: PositiveInt = 128
 
     receipt_batch_size: PositiveInt = 250
     factory_batch_size: PositiveInt = 250
