@@ -121,9 +121,7 @@ class TradersCleanupService:
                 logger.warning("Job lock was already released")
 
     def _build_cleanup_sql(self) -> str:
-        """DELETE-мутация Азата с порогом из конфига.
-
-        Порог подставляется как int из настроек (доверенное значение, не ввод
+        """Порог подставляется как int из настроек (доверенное значение, не ввод
         пользователя), поэтому интерполяция в текст безопасна.
         """
         return (
@@ -137,7 +135,7 @@ class TradersCleanupService:
 
     def _candidate_select(self) -> str:
         # Трейдеры с числом сделок меньше порога (LEFT JOIN → у трейдера без сделок
-        # count() = 0). Структура — как в присланном запросе Азата.
+        # count() = 0).
         min_transactions = int(self._settings.traders_cleanup_min_transactions)
         return (
             " SELECT t.contract_address"
