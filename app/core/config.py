@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     scheduler_timezone: NonEmptyStr = "UTC"
     scheduler_runs: PositiveInt = 1
 
+    # Периодическая чистка таблицы traders (удаление малоактивных трейдеров).
+    # Отдельный от scan-шедулера планировщик; в ClickHouse нет крона для DELETE.
+    traders_cleanup_enabled: bool = False
+    traders_cleanup_cron: str | None = None
+    traders_cleanup_min_transactions: PositiveInt = 3
+
     reverse_heuristics_enabled: bool = False
     reverse_heuristics_top_level_field: ReverseHeuristicsTopLevelField = (
         ReverseHeuristicsTopLevelField.TO
@@ -130,7 +136,7 @@ class Settings(BaseSettings):
             return value
         return str(value).strip().lower()
 
-    @field_validator("scheduler_cron", mode="before")
+    @field_validator("scheduler_cron", "traders_cleanup_cron", mode="before")
     @classmethod
     def _normalize_scheduler_cron(cls, value: object) -> str | None:
         if value is None:
