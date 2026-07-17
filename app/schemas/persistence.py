@@ -6,12 +6,26 @@ from pydantic import Field, field_validator
 
 from ..models.trading import SwapSide
 from ..utils import (
+    fits_db_decimal,
     normalize_address,
     normalize_optional_address,
     normalize_required_address,
     normalize_required_tx_hash,
 )
 from .base import EywaSchema
+
+
+def _sanitize_approx_tvl_usd(value: Decimal | None) -> Decimal | None:
+    """Отсекает TVL, не влезающий в колонку `Decimal(38, 18)`.
+
+    Мусорное значение (напр. `8.38e155` от скам-токена с фейковым балансом) обрушило
+    бы вставку блока с `Decimal convert overflow`, поэтому на границе БД трактуем его
+    как «неизвестно» (NULL). Логируется это у источника — `PoolTvlService`.
+    """
+
+    if value is None or fits_db_decimal(value):
+        return value
+    return None
 
 
 class DexWrite(EywaSchema):
@@ -51,6 +65,11 @@ class PoolWrite(EywaSchema):
     token_a_usd_share: float | None = Field(default=None, ge=0, le=1)
     liquidity_snapshot_block_number: int | None = None
 
+    @field_validator("approx_tvl_usd")
+    @classmethod
+    def _drop_overflowing_approx_tvl_usd(cls, value: Decimal | None) -> Decimal | None:
+        return _sanitize_approx_tvl_usd(value)
+
     @field_validator("token_a_usd_share")
     @classmethod
     def _validate_token_a_usd_share(cls, value: float | None) -> float | None:
@@ -80,6 +99,11 @@ class PoolLiquiditySnapshot(EywaSchema):
     approx_tvl_usd: Decimal | None = None
     token_a_usd_share: float | None = Field(default=None, ge=0, le=1)
     liquidity_snapshot_block_number: int | None = None
+
+    @field_validator("approx_tvl_usd")
+    @classmethod
+    def _drop_overflowing_approx_tvl_usd(cls, value: Decimal | None) -> Decimal | None:
+        return _sanitize_approx_tvl_usd(value)
 
     @field_validator("token_a_usd_share")
     @classmethod

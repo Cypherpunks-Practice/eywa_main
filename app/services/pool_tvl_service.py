@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from decimal import Decimal
 
 from ..core.config import Settings
 from ..core.exceptions import RpcError
 from ..schemas import DexKind, EnrichedSwapEvent, PoolLiquiditySnapshot
-from ..utils import async_resolve, decode_uint_call_result, iter_chunks, raw_amount_to_decimal
+from ..utils import (
+    async_resolve,
+    decode_uint_call_result,
+    fits_db_decimal,
+    iter_chunks,
+    raw_amount_to_decimal,
+)
 from .rpc_gateway_service import RpcGatewayService
 from .trade_enrichment_service import TradePricingContext
+
+logger = logging.getLogger(__name__)
 
 BALANCE_OF_SELECTOR = "0x70a08231"
 STANDARD_POOL_KINDS = {DexKind.UNI_V2_OR_SUSHI, DexKind.UNISWAP_V3}
@@ -54,6 +63,7 @@ class PoolTvlService:
             )
 
             snapshot = self._build_pool_liquidity_snapshot(
+                pool_address=pool_address,
                 token_a_value=token_a_value,
                 token_b_value=token_b_value,
                 block_number=block_number,
@@ -172,6 +182,7 @@ class PoolTvlService:
     @staticmethod
     def _build_pool_liquidity_snapshot(
         *,
+        pool_address: str,
         token_a_value: Decimal | None,
         token_b_value: Decimal | None,
         block_number: int,
@@ -180,6 +191,17 @@ class PoolTvlService:
             return None
 
         approx_tvl_usd = token_a_value + token_b_value
+        # TVL за пределами Decimal(38, 18) (обычно скам-токен с фейковым балансом)
+        # обрушил бы вставку блока; считаем такой снапшот отсутствующим.
+        if not fits_db_decimal(approx_tvl_usd):
+            logger.warning(
+                "Pool %s: approx TVL %s exceeds Decimal(38, 18), dropping snapshot at block %s",
+                pool_address,
+                approx_tvl_usd,
+                block_number,
+            )
+            return None
+
         if approx_tvl_usd == 0:
             token_a_usd_share = 0.5
         else:
